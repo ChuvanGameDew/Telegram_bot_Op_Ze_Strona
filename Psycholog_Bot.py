@@ -145,17 +145,13 @@ def has_user_completed_test(tg_id: int) -> bool:
         return False
 
 
-# ========== НОВАЯ ФУНКЦИЯ: СОХРАНЕНИЕ СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ (ТОЛЬКО ПОСЛЕ ТЕСТА) ==========
-
 def save_user_message(tg_id: int, message_text: str):
     """Сохраняет сообщение от пользователя в таблицу user_messages (только если тест пройден)"""
     try:
-        # Проверяем, прошёл ли пользователь тест
         if not has_user_completed_test(tg_id):
             logger.info(f"⏳ Пользователь {tg_id} ещё не прошёл тест, сообщение не сохранено")
             return False
         
-        # Получаем user_id из bot_users по tg_id
         result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
         if result.data:
             db_user_id = result.data[0]["id"]
@@ -171,15 +167,19 @@ def save_user_message(tg_id: int, message_text: str):
         return False
 
 
-# ========== ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ (ДЛЯ СОХРАНЕНИЯ В USER_MESSAGES) ==========
+# ========== MIDDLEWARE ДЛЯ СОХРАНЕНИЯ СООБЩЕНИЙ (НЕ БЛОКИРУЕТ ОБРАБОТКУ) ==========
 
 @dp.message()
-async def handle_any_message(message: types.Message, state: FSMContext):
-    """Обрабатывает любые сообщения и сохраняет их в user_messages (после теста)"""
+async def save_user_messages_middleware(message: types.Message, next_handler):
+    """Сохраняет сообщения пользователя, но не блокирует их обработку"""
     tg_id = message.from_user.id
     
-    # Сохраняем сообщение (только если тест пройден)
-    save_user_message(tg_id, message.text)
+    # Сохраняем сообщение (только если тест пройден и это не команда)
+    if message.text and not message.text.startswith('/'):
+        save_user_message(tg_id, message.text)
+    
+    # Передаём сообщение дальше к другим обработчикам
+    await next_handler()
 
 
 # ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ ==========
@@ -338,6 +338,10 @@ city_keyboard = ReplyKeyboardMarkup(
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
+    
+    # Сразу отвечаем, чтобы пользователь видел, что бот жив
+    await message.answer("🤖 Бот работает! Давай начнём...")
+    
     tg_id = message.from_user.id
     username = message.from_user.username
     name = message.from_user.first_name
