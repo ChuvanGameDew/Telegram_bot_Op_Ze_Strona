@@ -166,6 +166,25 @@ def save_user_message(tg_id: int, message_text: str):
         return False
 
 
+# ========== ОБРАБОТЧИК СОХРАНЕНИЯ СООБЩЕНИЙ ОТ ПОЛЬЗОВАТЕЛЕЙ ==========
+
+@dp.message()
+async def save_user_message_handler(message: types.Message):
+    """Сохраняет сообщения от пользователей в таблицу user_messages (только если тест пройден)"""
+    tg_id = message.from_user.id
+    
+    # Проверяем, прошёл ли пользователь тест
+    if has_user_completed_test(tg_id):
+        result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
+        if result.data:
+            db_user_id = result.data[0]["id"]
+            supabase.table("user_messages").insert({
+                "user_id": db_user_id,
+                "message": message.text
+            }).execute()
+            logger.info(f"💾 Сохранено сообщение от пользователя {tg_id} в user_messages")
+
+
 # ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ ==========
 
 async def process_message_queue():
@@ -322,8 +341,6 @@ city_keyboard = ReplyKeyboardMarkup(
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
-    
-    await message.answer("🤖 Бот работает! Давай начнём...")
     
     tg_id = message.from_user.id
     username = message.from_user.username
@@ -637,6 +654,7 @@ async def main():
     print("\n" + "="*50)
     print("🚀 БОТ ЗАПУЩЕН!")
     print("📦 Supabase подключён!")
+    print("💬 Сохранение сообщений пользователей (только после теста)")
     print("="*50 + "\n")
     asyncio.create_task(message_queue_worker())
     asyncio.create_task(subscription_checker_worker())
