@@ -267,7 +267,7 @@ async def subscription_checker_worker():
 # ========== КЛАВИАТУРЫ ==========
 
 main_keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="📖 Подробней")]],
+    keyboard=[[KeyboardButton(text="🔴🔵🪢 Приступить к разбору")]],
     resize_keyboard=True
 )
 
