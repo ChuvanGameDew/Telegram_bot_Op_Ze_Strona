@@ -149,7 +149,6 @@ def save_user_message(tg_id: int, message_text: str):
     """Сохраняет сообщение от пользователя в таблицу user_messages (только если тест пройден)"""
     try:
         if not has_user_completed_test(tg_id):
-            logger.info(f"⏳ Пользователь {tg_id} ещё не прошёл тест, сообщение не сохранено")
             return False
         
         result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
@@ -165,10 +164,6 @@ def save_user_message(tg_id: int, message_text: str):
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения сообщения пользователя: {e}")
         return False
-
-
-# ========== MIDDLEWARE ДЛЯ СОХРАНЕНИЯ СООБЩЕНИЙ (НЕ БЛОКИРУЕТ ОБРАБОТКУ) ==========
-
 
 
 # ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ ==========
@@ -328,7 +323,6 @@ city_keyboard = ReplyKeyboardMarkup(
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     
-    # Сразу отвечаем, чтобы пользователь видел, что бот жив
     await message.answer("🤖 Бот работает! Давай начнём...")
     
     tg_id = message.from_user.id
@@ -643,7 +637,6 @@ async def main():
     print("\n" + "="*50)
     print("🚀 БОТ ЗАПУЩЕН!")
     print("📦 Supabase подключён!")
-    print("💬 Сохранение сообщений пользователей (только после теста)")
     print("="*50 + "\n")
     asyncio.create_task(message_queue_worker())
     asyncio.create_task(subscription_checker_worker())
