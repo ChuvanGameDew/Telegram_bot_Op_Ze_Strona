@@ -38,8 +38,8 @@ SUPABASE_URL = "https://lkpqbskqtiiftdtqjbyp.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrcHFic2txdGlpZnRkdHFqYnlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NDg5ODIsImV4cCI6MjA5MDEyNDk4Mn0.vNADDb9v6cWPgEIJ5xkr8WkOi0DwlpL5kE-Snv9kaFY"
 
 # НАСТРОЙКИ ТЕЛЕГРАМ КАНАЛА
-CHANNEL_USERNAME = "@Chuvan_PUPS"
-CHANNEL_LINK = "https://t.me/Chuvan_PUPS"
+CHANNEL_USERNAME = "@andrey_trueself_channel"
+CHANNEL_LINK = "https://t.me/andrey_trueself_channel"
 
 # Подключение к Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -384,7 +384,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     await message.answer(
         "Привет.\n\n"
-        "Меня зовут Андрей. Я психолог-консультант. Психолог-консультант с дипломом. "
+        "Меня зовут Андрей. Психолог-консультант с дипломом. "
         "Распутываю жизненные узлы на стыке психологии, философии и духовных практик.\n\n"
         "Здесь не будет шаблонных фраз и «диагнозов за 2 минуты». Я смотрю на человека иначе — "
         "через механизмы психики, а не ярлыки.\n\n"
