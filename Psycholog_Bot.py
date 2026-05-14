@@ -394,7 +394,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     )
 
 
-@dp.message(F.text == "📖 Подробней")
+@dp.message(F.text == "🪢 Приступить к разбору")
 async def more_info(message: types.Message, state: FSMContext):
     await message.answer(
         "Сейчас я задам тебе 6 вопросов. Они простые, но не всегда лёгкие. "
