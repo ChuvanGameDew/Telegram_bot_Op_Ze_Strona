@@ -21,13 +21,12 @@ web_app = Flask(__name__)
 @web_app.route('/')
 @web_app.route('/health')
 def health_check():
-    return "", 200  # Пустой ответ для cron-job.org
+    return "", 200
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     web_app.run(host="0.0.0.0", port=port, debug=False)
 
-# Запускаем веб-сервер в отдельном потоке
 web_thread = Thread(target=run_web_server)
 web_thread.start()
 # ========== КОНЕЦ БЛОКА ДЛЯ RENDER ==========
@@ -37,24 +36,19 @@ TOKEN = "8644034235:AAGzJYsXf0E7OJyfShSK-KZadIUIGIEE26s"
 SUPABASE_URL = "https://lkpqbskqtiiftdtqjbyp.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrcHFic2txdGlpZnRkdHFqYnlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NDg5ODIsImV4cCI6MjA5MDEyNDk4Mn0.vNADDb9v6cWPgEIJ5xkr8WkOi0DwlpL5kE-Snv9kaFY"
 
-# НАСТРОЙКИ ТЕЛЕГРАМ КАНАЛА
 CHANNEL_USERNAME = "@andrey_trueself_channel"
 CHANNEL_LINK = "https://t.me/andrey_trueself_channel"
 
-# Подключение к Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализация бота
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 
-# Состояния для опросника
 class Questionnaire(StatesGroup):
     question1 = State()
     question2 = State()
@@ -71,7 +65,6 @@ class Questionnaire(StatesGroup):
 # ========== ФУНКЦИЯ ПРОВЕРКИ ПОДПИСКИ ==========
 
 async def check_subscription(user_id: int) -> bool:
-    """Проверяет, подписан ли пользователь на канал по username"""
     try:
         chat_member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
         return chat_member.status not in ['left', 'kicked']
@@ -83,10 +76,8 @@ async def check_subscription(user_id: int) -> bool:
 # ========== ФУНКЦИИ РАБОТЫ С БАЗОЙ ==========
 
 def get_or_create_user(tg_id: int, username: str, name: str):
-    """Получаем пользователя из bot_users или создаём нового"""
     try:
         result = supabase.table("bot_users").select("*").eq("tg_id", tg_id).execute()
-
         if len(result.data) == 0:
             new_user = supabase.table("bot_users").insert({
                 "tg_id": tg_id,
@@ -106,9 +97,8 @@ def get_or_create_user(tg_id: int, username: str, name: str):
 
 
 def save_answer(user_id: int, question_number: int, answer: str):
-    """Сохраняет ответ пользователя в таблицу user_answers"""
     try:
-        result = supabase.table("user_answers").insert({
+        supabase.table("user_answers").insert({
             "user_id": user_id,
             "question_number": question_number,
             "answer": answer
@@ -121,7 +111,6 @@ def save_answer(user_id: int, question_number: int, answer: str):
 
 
 def update_user_info(user_id: int, field: str, value: str):
-    """Обновляет информацию о пользователе в bot_users"""
     try:
         supabase.table("bot_users").update({
             field: value,
@@ -135,7 +124,6 @@ def update_user_info(user_id: int, field: str, value: str):
 
 
 def update_test_completed(user_id: int):
-    """Обновляет статус completed_test в таблице bot_users"""
     try:
         supabase.table("bot_users").update({
             "completed_test": True,
@@ -147,7 +135,6 @@ def update_test_completed(user_id: int):
 
 
 def has_user_completed_test(tg_id: int) -> bool:
-    """Проверял ли пользователь уже проходил тест"""
     try:
         result = supabase.table("bot_users").select("completed_test").eq("tg_id", tg_id).execute()
         if result.data and len(result.data) > 0:
@@ -158,89 +145,92 @@ def has_user_completed_test(tg_id: int) -> bool:
         return False
 
 
+# ========== НОВАЯ ФУНКЦИЯ: СОХРАНЕНИЕ СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ (ТОЛЬКО ПОСЛЕ ТЕСТА) ==========
+
+def save_user_message(tg_id: int, message_text: str):
+    """Сохраняет сообщение от пользователя в таблицу user_messages (только если тест пройден)"""
+    try:
+        # Проверяем, прошёл ли пользователь тест
+        if not has_user_completed_test(tg_id):
+            logger.info(f"⏳ Пользователь {tg_id} ещё не прошёл тест, сообщение не сохранено")
+            return False
+        
+        # Получаем user_id из bot_users по tg_id
+        result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
+        if result.data:
+            db_user_id = result.data[0]["id"]
+            supabase.table("user_messages").insert({
+                "user_id": db_user_id,
+                "message": message_text
+            }).execute()
+            logger.info(f"💾 Сохранено сообщение от пользователя {tg_id}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения сообщения пользователя: {e}")
+        return False
+
+
+# ========== ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ (ДЛЯ СОХРАНЕНИЯ В USER_MESSAGES) ==========
+
+@dp.message()
+async def handle_any_message(message: types.Message, state: FSMContext):
+    """Обрабатывает любые сообщения и сохраняет их в user_messages (после теста)"""
+    tg_id = message.from_user.id
+    
+    # Сохраняем сообщение (только если тест пройден)
+    save_user_message(tg_id, message.text)
+
+
 # ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ ==========
 
 async def process_message_queue():
-    """Проверяет таблицу admin_messages и отправляет ожидающие сообщения"""
     try:
-        messages = supabase.table("admin_messages") \
-            .select("*") \
-            .eq("status", "pending") \
-            .execute()
-
+        messages = supabase.table("admin_messages").select("*").eq("status", "pending").execute()
         if not messages.data:
             return
-
         logger.info(f"📨 Найдено {len(messages.data)} сообщений в очереди")
-
         for msg in messages.data:
             try:
                 user_id = msg["user_id"]
-                user_result = supabase.table("bot_users") \
-                    .select("tg_id, name, username") \
-                    .eq("id", user_id) \
-                    .execute()
-
+                user_result = supabase.table("bot_users").select("tg_id, name, username").eq("id", user_id).execute()
                 if not user_result.data:
-                    logger.error(f"❌ Пользователь с id={user_id} не найден")
                     supabase.table("admin_messages").update({
-                        "status": "failed",
-                        "error": f"User {user_id} not found"
+                        "status": "failed", "error": f"User {user_id} not found"
                     }).eq("id", msg["id"]).execute()
                     continue
-
                 tg_id = user_result.data[0]["tg_id"]
-                message_text = msg["message"]
-
-                logger.info(f"📤 Отправляем сообщение {msg['id']} пользователю {tg_id}")
-
-                await bot.send_message(chat_id=tg_id, text=message_text)
-
+                await bot.send_message(chat_id=tg_id, text=msg["message"])
                 supabase.table("admin_messages").update({
-                    "status": "sent",
-                    "sent_at": datetime.now().isoformat()
+                    "status": "sent", "sent_at": datetime.now().isoformat()
                 }).eq("id", msg["id"]).execute()
-
                 logger.info(f"✅ Отправлено сообщение {msg['id']} пользователю {tg_id}")
-
                 await asyncio.sleep(1)
-
             except Exception as e:
                 supabase.table("admin_messages").update({
-                    "status": "failed",
-                    "error": str(e)
+                    "status": "failed", "error": str(e)
                 }).eq("id", msg["id"]).execute()
                 logger.error(f"❌ Ошибка отправки сообщения {msg['id']}: {e}")
-
     except Exception as e:
         logger.error(f"❌ Ошибка в process_message_queue: {e}")
 
 
 async def message_queue_worker():
-    """Фоновая задача, которая каждые 5 секунд проверяет очередь сообщений"""
     while True:
         await process_message_queue()
         await asyncio.sleep(5)
 
 
-# ========== ФОНОВАЯ ПРОВЕРКА ПОДПИСКИ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ ==========
-
 async def check_all_subscriptions():
-    """Проверяет подписку всех пользователей и обновляет статус в БД"""
     try:
         users = supabase.table("bot_users").select("id, tg_id, is_subscribed").execute()
-
         if not users.data:
             return
-
         updated_count = 0
-
         for user in users.data:
             tg_id = user["tg_id"]
             current_status = user.get("is_subscribed", False)
-
             is_subscribed = await check_subscription(tg_id)
-
             if current_status != is_subscribed:
                 supabase.table("bot_users").update({
                     "is_subscribed": is_subscribed,
@@ -249,16 +239,13 @@ async def check_all_subscriptions():
                 }).eq("id", user["id"]).execute()
                 updated_count += 1
                 logger.info(f"🔄 Обновлён статус подписки для {tg_id}: {current_status} -> {is_subscribed}")
-
         if updated_count > 0:
             logger.info(f"✅ Обновлено статусов подписки: {updated_count}")
-
     except Exception as e:
         logger.error(f"❌ Ошибка при проверке подписок: {e}")
 
 
 async def subscription_checker_worker():
-    """Фоновая задача, которая каждые 30 секунд проверяет подписки всех пользователей"""
     while True:
         await check_all_subscriptions()
         await asyncio.sleep(30)
@@ -351,18 +338,13 @@ city_keyboard = ReplyKeyboardMarkup(
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
-
     tg_id = message.from_user.id
     username = message.from_user.username
     name = message.from_user.first_name
 
-    # Проверяем, проходил ли пользователь тест
     if has_user_completed_test(tg_id):
-        # Пользователь уже проходил тест
         keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[[
-                InlineKeyboardButton(text="🧠 Наш канал", url=CHANNEL_LINK)
-            ]]
+            inline_keyboard=[[InlineKeyboardButton(text="🧠 Наш канал", url=CHANNEL_LINK)]]
         )
         await message.answer(
             "😊 **Вы уже проходили этот опрос!**\n\n"
@@ -375,13 +357,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
         return
 
     user_id, user = get_or_create_user(tg_id, username, name)
-
     if user_id is None:
         await message.answer("❌ Ошибка подключения к базе данных. Попробуйте позже.")
         return
-
     await state.update_data(user_id=user_id)
-
     await message.answer(
         "Привет.\n\n"
         "Меня зовут Андрей. Психолог-консультант с дипломом. "
@@ -412,15 +391,9 @@ async def more_info(message: types.Message, state: FSMContext):
 
 @dp.message(F.text == "🚀 Поехали!")
 async def start_questionnaire(message: types.Message, state: FSMContext):
-    # Ещё раз проверяем перед началом теста
     if has_user_completed_test(message.from_user.id):
-        await message.answer(
-            "😊 **Вы уже проходили этот опрос!**\n\n"
-            "Спасибо за доверие. Я помню ваши ответы.",
-            parse_mode="Markdown"
-        )
+        await message.answer("😊 **Вы уже проходили этот опрос!**\n\nСпасибо за доверие.", parse_mode="Markdown")
         return
-
     await state.set_state(Questionnaire.question1)
     await message.answer(
         "📝 **Вопрос 1 из 6**\n\n"
@@ -434,25 +407,19 @@ async def start_questionnaire(message: types.Message, state: FSMContext):
 
 @dp.message(Questionnaire.question1)
 async def answer_question1(message: types.Message, state: FSMContext):
-    # Проверяем, не прошёл ли тест за время ответа
     if has_user_completed_test(message.from_user.id):
         await message.answer("😊 Вы уже прошли этот опрос. Спасибо!")
         await state.clear()
         return
-
     answer = message.text.strip()
     if answer == "❌ Я не помню / Не хочу отвечать":
         answer = "Не помню / Не хочет отвечать"
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         save_answer(user_id, 1, answer)
-
     await state.update_data(q1=answer)
     await state.set_state(Questionnaire.question2)
-
     await message.answer(
         "📝 **Вопрос 2 из 6**\n\n"
         "В той ситуации — или в любой другой, где тебе было тяжело, — что ты обычно делаешь?\n\n"
@@ -477,18 +444,13 @@ async def answer_question2(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     answer = message.text.strip()
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         save_answer(user_id, 2, answer)
-
     await state.update_data(q2=answer)
     await state.set_state(Questionnaire.question3)
-
     await message.answer(
         "📝 **Вопрос 3 из 6**\n\n"
         "Если представить, что у этой эмоции или состояния есть лицо, форма, цвет или даже персонаж — что бы это было?\n\n"
@@ -504,20 +466,15 @@ async def answer_question3(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     answer = message.text.strip()
     if answer == "❓ Сложно ответить":
         answer = "Сложно ответить"
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         save_answer(user_id, 3, answer)
-
     await state.update_data(q3=answer)
     await state.set_state(Questionnaire.question4)
-
     await message.answer(
         "📝 **Вопрос 4 из 6**\n\n"
         "Бывает, что ты думаешь:\n"
@@ -533,18 +490,13 @@ async def answer_question4(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     answer = message.text.strip()
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         save_answer(user_id, 4, answer)
-
     await state.update_data(q4=answer)
     await state.set_state(Questionnaire.question5)
-
     await message.answer(
         "📝 **Вопрос 5 из 6**\n\n"
         "Какое из утверждений звучит про тебя правдивее всего?",
@@ -568,18 +520,13 @@ async def answer_question5(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     answer = message.text.strip()
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         save_answer(user_id, 5, answer)
-
     await state.update_data(q5=answer)
     await state.set_state(Questionnaire.question6)
-
     await message.answer(
         "📝 **Вопрос 6 из 6. Последний.**\n\n"
         "А теперь представь на секунду, что ты проснулась(ся) через год и твоя жизнь немного изменилась.\n\n"
@@ -596,17 +543,12 @@ async def answer_question6(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     answer = message.text.strip()
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         save_answer(user_id, 6, answer)
-
     await state.update_data(q6=answer)
-
     await state.set_state(Questionnaire.ask_name)
     await message.answer(
         "И напоследок — пара коротких уточнений. Это поможет мне увидеть твой контекст и не додумывать лишнего.\n\n"
@@ -622,17 +564,13 @@ async def ask_name(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     user_name = message.text.strip()
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         update_user_info(user_id, "user_name", user_name)
-
     await state.update_data(user_name=user_name)
     await state.set_state(Questionnaire.ask_age)
-
     await message.answer(
         "Сколько тебе лет?\n\n"
         "Выбери свой возрастной диапазон:",
@@ -646,21 +584,14 @@ async def ask_age(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     age = message.text.strip()
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         update_user_info(user_id, "user_age", age)
-
     await state.update_data(user_age=age)
     await state.set_state(Questionnaire.ask_gender)
-
-    await message.answer(
-        "Твой пол?",
-        reply_markup=gender_keyboard
-    )
+    await message.answer("Твой пол?", reply_markup=gender_keyboard)
 
 
 @dp.message(Questionnaire.ask_gender)
@@ -669,17 +600,13 @@ async def ask_gender(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     gender = message.text.strip()
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         update_user_info(user_id, "user_gender", gender)
-
     await state.update_data(user_gender=gender)
     await state.set_state(Questionnaire.ask_city)
-
     await message.answer(
         "Где ты сейчас?\n\n"
         "Город или страна. Среда иногда незаметно влияет на наши механизмы.\n\n"
@@ -694,24 +621,16 @@ async def ask_city(message: types.Message, state: FSMContext):
         await message.answer("😊 Вы уже прошли этот опрос.")
         await state.clear()
         return
-
     city = message.text.strip()
-
     if city == "🙅‍♂️ Не хочу указывать":
         city = "Не указано"
-
     data = await state.get_data()
     user_id = data.get("user_id")
-
     if user_id:
         update_user_info(user_id, "user_city", city)
         update_test_completed(user_id)
-
     await state.update_data(user_city=city)
-
     await state.clear()
-
-    # ФИНАЛЬНОЕ СООБЩЕНИЕ С ТЕКСТОВОЙ ССЫЛКОЙ
     await message.answer(
         "🙏 **Спасибо. Твои ответы у меня.**\n\n"
         "Я прочитаю их сам и напишу тебе лично в Telegram — с гипотезой и поддержкой. Без диагнозов.\n\n"
@@ -728,10 +647,13 @@ async def ask_city(message: types.Message, state: FSMContext):
 # ========== ЗАПУСК БОТА ==========
 
 async def main():
-    # Запускаем фоновые задачи
+    print("\n" + "="*50)
+    print("🚀 БОТ ЗАПУЩЕН!")
+    print("📦 Supabase подключён!")
+    print("💬 Сохранение сообщений пользователей (только после теста)")
+    print("="*50 + "\n")
     asyncio.create_task(message_queue_worker())
     asyncio.create_task(subscription_checker_worker())
-
     await dp.start_polling(bot)
 
 
