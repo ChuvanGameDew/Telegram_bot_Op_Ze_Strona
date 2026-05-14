@@ -32,7 +32,7 @@ web_thread.start()
 # ========== КОНЕЦ БЛОКА ДЛЯ RENDER ==========
 
 # ========== НАСТРОЙКИ ==========
-TOKEN = "8644034235:AAGzJYsXf0E7OJyfShSK-KZadIUIGIEE26s"
+TOKEN = "8644034235:AAEWQwljeHg2gw9UIaBQJEoDJAuiMGQUaMU"
 SUPABASE_URL = "https://lkpqbskqtiiftdtqjbyp.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrcHFic2txdGlpZnRkdHFqYnlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NDg5ODIsImV4cCI6MjA5MDEyNDk4Mn0.vNADDb9v6cWPgEIJ5xkr8WkOi0DwlpL5kE-Snv9kaFY"
 
