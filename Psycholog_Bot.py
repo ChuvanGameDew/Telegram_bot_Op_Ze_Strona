@@ -15,20 +15,17 @@ from flask import Flask
 from threading import Thread
 import os
 
-# Создаем маленькое веб-приложение для Health Check
+# Создаем маленькое веб-приложение
 web_app = Flask(__name__)
-
 
 @web_app.route('/')
 @web_app.route('/health')
 def health_check():
-    return "OK", 200
-
+    return "", 200  # Пустой ответ для cron-job.org
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
-    web_app.run(host="0.0.0.0", port=port)
-
+    web_app.run(host="0.0.0.0", port=port, debug=False)
 
 # Запускаем веб-сервер в отдельном потоке
 web_thread = Thread(target=run_web_server)
