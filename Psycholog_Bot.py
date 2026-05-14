@@ -712,15 +712,6 @@ async def ask_city(message: types.Message, state: FSMContext):
 
     await state.update_data(user_city=city)
 
-    print(f"\n{'=' * 60}")
-    print(f"✅ НОВЫЙ ОПРОС ПРОЙДЕН!")
-    print(f"👤 Пользователь: @{message.from_user.username} ({message.from_user.first_name})")
-    print(f"🆔 Telegram ID: {message.from_user.id}")
-    print(f"🆔 User ID в БД: {user_id}")
-    print(f"📅 Время: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}")
-    print(f"📍 Город: {city}")
-    print(f"{'=' * 60}\n")
-
     await state.clear()
 
     # ФИНАЛЬНОЕ СООБЩЕНИЕ С ТЕКСТОВОЙ ССЫЛКОЙ
@@ -740,15 +731,6 @@ async def ask_city(message: types.Message, state: FSMContext):
 # ========== ЗАПУСК БОТА ==========
 
 async def main():
-    print("\n" + "=" * 50)
-    print("🚀 БОТ ЗАПУЩЕН!")
-    print(f"📢 Канал: {CHANNEL_USERNAME}")
-    print("📦 Supabase подключён!")
-    print("🤖 Готов к работе!")
-    print("📨 Фоновая задача отправки сообщений запущена (каждые 5 сек)!")
-    print("🔄 Фоновая задача проверки подписок запущена (каждые 30 сек)!")
-    print("=" * 50 + "\n")
-
     # Запускаем фоновые задачи
     asyncio.create_task(message_queue_worker())
     asyncio.create_task(subscription_checker_worker())
