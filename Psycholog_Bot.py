@@ -158,31 +158,12 @@ def save_user_message(tg_id: int, message_text: str):
                 "user_id": db_user_id,
                 "message": message_text
             }).execute()
-            logger.info(f"💾 Сохранено сообщение от пользователя {tg_id}")
+            logger.info(f"💾 Сохранено сообщение от пользователя {tg_id} в user_messages")
             return True
         return False
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения сообщения пользователя: {e}")
         return False
-
-
-# ========== ОБРАБОТЧИК СОХРАНЕНИЯ СООБЩЕНИЙ ОТ ПОЛЬЗОВАТЕЛЕЙ ==========
-
-@dp.message()
-async def save_user_message_handler(message: types.Message):
-    """Сохраняет сообщения от пользователей в таблицу user_messages (только если тест пройден)"""
-    tg_id = message.from_user.id
-    
-    # Проверяем, прошёл ли пользователь тест
-    if has_user_completed_test(tg_id):
-        result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
-        if result.data:
-            db_user_id = result.data[0]["id"]
-            supabase.table("user_messages").insert({
-                "user_id": db_user_id,
-                "message": message.text
-            }).execute()
-            logger.info(f"💾 Сохранено сообщение от пользователя {tg_id} в user_messages")
 
 
 # ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ ==========
@@ -336,7 +317,7 @@ city_keyboard = ReplyKeyboardMarkup(
 )
 
 
-# ========== КОМАНДЫ ==========
+# ========== КОМАНДЫ (СНАЧАЛА ИДУТ ОБРАБОТЧИКИ С ФИЛЬТРАМИ) ==========
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -646,6 +627,25 @@ async def ask_city(message: types.Message, state: FSMContext):
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove()
     )
+
+
+# ========== ОБРАБОТЧИК БЕЗ ФИЛЬТРОВ (В САМОМ КОНЦЕ, ДЛЯ СОХРАНЕНИЯ СООБЩЕНИЙ) ==========
+
+@dp.message()
+async def save_user_message_handler(message: types.Message):
+    """Сохраняет сообщения от пользователей в таблицу user_messages (только если тест пройден)"""
+    tg_id = message.from_user.id
+    
+    # Проверяем, прошёл ли пользователь тест
+    if has_user_completed_test(tg_id):
+        result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
+        if result.data:
+            db_user_id = result.data[0]["id"]
+            supabase.table("user_messages").insert({
+                "user_id": db_user_id,
+                "message": message.text
+            }).execute()
+            logger.info(f"💾 Сохранено сообщение от пользователя {tg_id} в user_messages")
 
 
 # ========== ЗАПУСК БОТА ==========
