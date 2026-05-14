@@ -170,17 +170,13 @@ def save_user_message(tg_id: int, message_text: str):
 # ========== MIDDLEWARE ДЛЯ СОХРАНЕНИЯ СООБЩЕНИЙ (НЕ БЛОКИРУЕТ ОБРАБОТКУ) ==========
 
 @dp.message()
-async def save_user_messages_middleware(message: types.Message, next_handler):
+async def save_user_messages_middleware(message: types.Message):
     """Сохраняет сообщения пользователя, но не блокирует их обработку"""
     tg_id = message.from_user.id
     
     # Сохраняем сообщение (только если тест пройден и это не команда)
     if message.text and not message.text.startswith('/'):
         save_user_message(tg_id, message.text)
-    
-    # Передаём сообщение дальше к другим обработчикам
-    await next_handler()
-
 
 # ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ ==========
 
