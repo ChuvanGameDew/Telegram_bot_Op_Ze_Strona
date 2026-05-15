@@ -15,17 +15,19 @@ from flask import Flask
 from threading import Thread
 import os
 
-# Создаем маленькое веб-приложение
 web_app = Flask(__name__)
+
 
 @web_app.route('/')
 @web_app.route('/health')
 def health_check():
     return "", 200
 
+
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     web_app.run(host="0.0.0.0", port=port, debug=False)
+
 
 web_thread = Thread(target=run_web_server)
 web_thread.start()
@@ -50,16 +52,24 @@ dp = Dispatcher(storage=storage)
 
 
 class Questionnaire(StatesGroup):
+    ask_name = State()
     question1 = State()
     question2 = State()
     question3 = State()
     question4 = State()
     question5 = State()
     question6 = State()
-    ask_name = State()
     ask_age = State()
     ask_gender = State()
     ask_city = State()
+
+
+# ========== КЛАВИАТУРА ДЛЯ СООБЩЕНИЙ АДМИНА (CALENDLY) ==========
+calendly_keyboard = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="✨️ Давай поисследуем ✨️", url="https://calendly.com/andrey1001115/30min")]
+    ]
+)
 
 
 # ========== ФУНКЦИЯ ПРОВЕРКИ ПОДПИСКИ ==========
@@ -146,11 +156,9 @@ def has_user_completed_test(tg_id: int) -> bool:
 
 
 def save_user_message(tg_id: int, message_text: str):
-    """Сохраняет сообщение от пользователя в таблицу user_messages (только если тест пройден)"""
     try:
         if not has_user_completed_test(tg_id):
             return False
-        
         result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
         if result.data:
             db_user_id = result.data[0]["id"]
@@ -166,7 +174,7 @@ def save_user_message(tg_id: int, message_text: str):
         return False
 
 
-# ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ ==========
+# ========== ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЙ ИЗ ОЧЕРЕДИ (С КНОПКОЙ CALENDLY) ==========
 
 async def process_message_queue():
     try:
@@ -184,11 +192,18 @@ async def process_message_queue():
                     }).eq("id", msg["id"]).execute()
                     continue
                 tg_id = user_result.data[0]["tg_id"]
-                await bot.send_message(chat_id=tg_id, text=msg["message"])
+
+                # ОТПРАВЛЯЕМ СООБЩЕНИЕ С КНОПКОЙ CALENDLY
+                await bot.send_message(
+                    chat_id=tg_id,
+                    text=msg["message"],
+                    reply_markup=calendly_keyboard  # <-- КНОПКА ПОД КАЖДЫМ СООБЩЕНИЕМ
+                )
+
                 supabase.table("admin_messages").update({
                     "status": "sent", "sent_at": datetime.now().isoformat()
                 }).eq("id", msg["id"]).execute()
-                logger.info(f"✅ Отправлено сообщение {msg['id']} пользователю {tg_id}")
+                logger.info(f"✅ Отправлено сообщение {msg['id']} пользователю {tg_id} с кнопкой Calendly")
                 await asyncio.sleep(1)
             except Exception as e:
                 supabase.table("admin_messages").update({
@@ -253,6 +268,11 @@ q1_keyboard = ReplyKeyboardMarkup(
 )
 
 q2_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="❓ Сложно ответить")]],
+    resize_keyboard=True
+)
+
+q3_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📱 Залипаю в соцсетях / сериалах / телефоне")],
         [KeyboardButton(text="🍕 Заедаю / закуриваю / выпиваю")],
@@ -262,11 +282,6 @@ q2_keyboard = ReplyKeyboardMarkup(
         [KeyboardButton(text="😶 Делаю вид, что ничего не случилось")],
         [KeyboardButton(text="✏️ Свой вариант")],
     ],
-    resize_keyboard=True
-)
-
-q3_keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="❓ Сложно ответить")]],
     resize_keyboard=True
 )
 
@@ -317,12 +332,12 @@ city_keyboard = ReplyKeyboardMarkup(
 )
 
 
-# ========== КОМАНДЫ (СНАЧАЛА ИДУТ ОБРАБОТЧИКИ С ФИЛЬТРАМИ) ==========
+# ========== КОМАНДЫ ==========
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
-    
+
     tg_id = message.from_user.id
     username = message.from_user.username
     name = message.from_user.first_name
@@ -332,11 +347,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
             inline_keyboard=[[InlineKeyboardButton(text="🧠 Наш канал", url=CHANNEL_LINK)]]
         )
         await message.answer(
-            "😊 **Вы уже проходили этот опрос!**\n\n"
+            "😊 Вы уже проходили этот опрос!\n\n"
             "Спасибо за доверие. Я помню ваши ответы.\n\n"
-            "Если хотите что-то уточнить или обсудить — напишите мне лично.\n\n"
+            "Если хотите что-то уточнить или обсудить — напишите мне лично: @Andrey_trueself\n\n"
             "А пока — подписывайтесь на мой канал, там я делюсь полезными мыслями о психологии.",
-            parse_mode="Markdown",
             reply_markup=keyboard
         )
         return
@@ -348,12 +362,12 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.update_data(user_id=user_id)
     await message.answer(
         "Привет.\n\n"
-        "Меня зовут Андрей. Психолог-консультант с дипломом. "
+        "Меня зовут Андрей. Я дипломированный психолог-консультант. "
         "Распутываю жизненные узлы на стыке психологии, философии и духовных практик.\n\n"
         "Здесь не будет шаблонных фраз и «диагнозов за 2 минуты». Я смотрю на человека иначе — "
         "через механизмы психики, а не ярлыки.\n\n"
-        "Я веду этот бот не как машина. Как человек, который сам прошёл через стыд, "
-        "погоню за достижениями и встречу с собой.",
+        "Я веду этот бот как человек, который сам прошёл через стыд, "
+        "погоню за достижениями и встречу с собой🤍",
         reply_markup=main_keyboard
     )
 
@@ -365,9 +379,9 @@ async def more_info(message: types.Message, state: FSMContext):
         "Не нужно придумывать красивые ответы — просто то, что приходит в голову.\n\n"
         "✏️ Зачем это?\n"
         "Я хочу увидеть твой запрос, твою точку напряжения. Тот самый «узел», который мешает дышать свободно.\n\n"
-        "🎁 Что ты получишь?\n"
-        "Через несколько часов (максимум завтра утром) я напишу тебе лично. "
-        "Без шаблонов. С поддержкой, гипотезой и одним вопросом, который поможет тебе копнуть глубже.\n\n"
+        "✨️ Что ты получишь?\n"
+        "Через несколько часов (максимум завтра утром) я отправлю тебе персонализированный разбор. "
+        "Без шаблонов. С поддержкой, гипотезой и вопросами, которые помогут тебе копнуть глубже.\n\n"
         "Это не автоответчик. Это разговор.\n\n"
         "Поехали?",
         reply_markup=start_keyboard
@@ -377,8 +391,28 @@ async def more_info(message: types.Message, state: FSMContext):
 @dp.message(F.text == "🚀 Поехали!")
 async def start_questionnaire(message: types.Message, state: FSMContext):
     if has_user_completed_test(message.from_user.id):
-        await message.answer("😊 **Вы уже проходили этот опрос!**\n\nСпасибо за доверие.", parse_mode="Markdown")
+        await message.answer("😊 Вы уже проходили этот опрос!\n\nСпасибо за доверие.")
         return
+    await state.set_state(Questionnaire.ask_name)
+    await message.answer(
+        "Как я могу к тебе обращаться?\n"
+        "(Имя или псевдоним — как удобно)",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+
+@dp.message(Questionnaire.ask_name)
+async def process_name(message: types.Message, state: FSMContext):
+    if has_user_completed_test(message.from_user.id):
+        await message.answer("😊 Вы уже прошли этот опрос.")
+        await state.clear()
+        return
+    user_name = message.text.strip()
+    data = await state.get_data()
+    user_id = data.get("user_id")
+    if user_id:
+        update_user_info(user_id, "user_name", user_name)
+    await state.update_data(user_name=user_name)
     await state.set_state(Questionnaire.question1)
     await message.answer(
         "📝 **Вопрос 1 из 6**\n\n"
@@ -407,20 +441,11 @@ async def answer_question1(message: types.Message, state: FSMContext):
     await state.set_state(Questionnaire.question2)
     await message.answer(
         "📝 **Вопрос 2 из 6**\n\n"
-        "В той ситуации — или в любой другой, где тебе было тяжело, — что ты обычно делаешь?\n\n"
-        "Выбери самый частый вариант:",
+        "Если представить, что у этой эмоции или состояния есть лицо, форма, цвет или даже персонаж — что бы это было?\n\n"
+        "Не думай слишком много. Первое, что приходит в голову.",
         parse_mode="Markdown",
         reply_markup=q2_keyboard
     )
-
-
-@dp.message(Questionnaire.question2, F.text == "✏️ Свой вариант")
-async def custom_answer_question2(message: types.Message, state: FSMContext):
-    if has_user_completed_test(message.from_user.id):
-        await message.answer("😊 Вы уже прошли этот опрос.")
-        await state.clear()
-        return
-    await message.answer("Напиши свой вариант:", reply_markup=ReplyKeyboardRemove())
 
 
 @dp.message(Questionnaire.question2)
@@ -430,6 +455,8 @@ async def answer_question2(message: types.Message, state: FSMContext):
         await state.clear()
         return
     answer = message.text.strip()
+    if answer == "❓ Сложно ответить":
+        answer = "Сложно ответить"
     data = await state.get_data()
     user_id = data.get("user_id")
     if user_id:
@@ -438,11 +465,20 @@ async def answer_question2(message: types.Message, state: FSMContext):
     await state.set_state(Questionnaire.question3)
     await message.answer(
         "📝 **Вопрос 3 из 6**\n\n"
-        "Если представить, что у этой эмоции или состояния есть лицо, форма, цвет или даже персонаж — что бы это было?\n\n"
-        "Не думай слишком много. Первое, что приходит в голову.",
+        "В той ситуации — или в любой другой, где тебе было тяжело, — что ты обычно делаешь?\n\n"
+        "Выбери самый частый вариант:",
         parse_mode="Markdown",
         reply_markup=q3_keyboard
     )
+
+
+@dp.message(Questionnaire.question3, F.text == "✏️ Свой вариант")
+async def custom_answer_question3(message: types.Message, state: FSMContext):
+    if has_user_completed_test(message.from_user.id):
+        await message.answer("😊 Вы уже прошли этот опрос.")
+        await state.clear()
+        return
+    await message.answer("Напиши свой вариант:", reply_markup=ReplyKeyboardRemove())
 
 
 @dp.message(Questionnaire.question3)
@@ -452,8 +488,6 @@ async def answer_question3(message: types.Message, state: FSMContext):
         await state.clear()
         return
     answer = message.text.strip()
-    if answer == "❓ Сложно ответить":
-        answer = "Сложно ответить"
     data = await state.get_data()
     user_id = data.get("user_id")
     if user_id:
@@ -534,29 +568,9 @@ async def answer_question6(message: types.Message, state: FSMContext):
     if user_id:
         save_answer(user_id, 6, answer)
     await state.update_data(q6=answer)
-    await state.set_state(Questionnaire.ask_name)
-    await message.answer(
-        "И напоследок — пара коротких уточнений. Это поможет мне увидеть твой контекст и не додумывать лишнего.\n\n"
-        "Как к тебе обращаться?\n"
-        "(Имя или псевдоним — как удобно)",
-        reply_markup=ReplyKeyboardRemove()
-    )
-
-
-@dp.message(Questionnaire.ask_name)
-async def ask_name(message: types.Message, state: FSMContext):
-    if has_user_completed_test(message.from_user.id):
-        await message.answer("😊 Вы уже прошли этот опрос.")
-        await state.clear()
-        return
-    user_name = message.text.strip()
-    data = await state.get_data()
-    user_id = data.get("user_id")
-    if user_id:
-        update_user_info(user_id, "user_name", user_name)
-    await state.update_data(user_name=user_name)
     await state.set_state(Questionnaire.ask_age)
     await message.answer(
+        "И напоследок — пара коротких уточнений. Это поможет мне увидеть твой контекст и не додумывать лишнего.\n\n"
         "Сколько тебе лет?\n\n"
         "Выбери свой возрастной диапазон:",
         reply_markup=age_keyboard
@@ -611,13 +625,14 @@ async def ask_city(message: types.Message, state: FSMContext):
         city = "Не указано"
     data = await state.get_data()
     user_id = data.get("user_id")
+    user_name = data.get("user_name", "")
     if user_id:
         update_user_info(user_id, "user_city", city)
         update_test_completed(user_id)
     await state.update_data(user_city=city)
     await state.clear()
     await message.answer(
-        "🙏 **Спасибо. Твои ответы у меня.**\n\n"
+        f"🙏 **Спасибо {user_name}. Твои ответы у меня.**\n\n"
         "Я прочитаю их сам и напишу тебе лично в Telegram — с гипотезой и поддержкой. Без диагнозов.\n\n"
         "Обычно отвечаю через несколько часов, максимум — завтра утром.\n\n"
         "**🧠 А ещё — если тебе интересна психология, саморазвитие и как работают наши механизмы психики...**\n\n"
@@ -629,14 +644,11 @@ async def ask_city(message: types.Message, state: FSMContext):
     )
 
 
-# ========== ОБРАБОТЧИК БЕЗ ФИЛЬТРОВ (В САМОМ КОНЦЕ, ДЛЯ СОХРАНЕНИЯ СООБЩЕНИЙ) ==========
+# ========== ОБРАБОТЧИК БЕЗ ФИЛЬТРОВ (ДЛЯ СОХРАНЕНИЯ СООБЩЕНИЙ) ==========
 
 @dp.message()
 async def save_user_message_handler(message: types.Message):
-    """Сохраняет сообщения от пользователей в таблицу user_messages (только если тест пройден)"""
     tg_id = message.from_user.id
-    
-    # Проверяем, прошёл ли пользователь тест
     if has_user_completed_test(tg_id):
         result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
         if result.data:
@@ -651,11 +663,12 @@ async def save_user_message_handler(message: types.Message):
 # ========== ЗАПУСК БОТА ==========
 
 async def main():
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("🚀 БОТ ЗАПУЩЕН!")
     print("📦 Supabase подключён!")
     print("💬 Сохранение сообщений пользователей (только после теста)")
-    print("="*50 + "\n")
+    print("🔘 Кнопка Calendly добавлена к сообщениям админа")
+    print("=" * 50 + "\n")
     asyncio.create_task(message_queue_worker())
     asyncio.create_task(subscription_checker_worker())
     await dp.start_polling(bot)
