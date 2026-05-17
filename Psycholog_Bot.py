@@ -67,7 +67,7 @@ class Questionnaire(StatesGroup):
 # ========== КЛАВИАТУРА ДЛЯ СООБЩЕНИЙ АДМИНА (CALENDLY) ==========
 calendly_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="✨️ Давай поисследуем ✨️", url="https://calendly.com/andrey1001115/30min")]
+        [InlineKeyboardButton(text="✨️ Давай поисследуем ✨️", url="https://calendly.com/andrey1001115/new-meeting")]
     ]
 )
 
@@ -197,7 +197,7 @@ async def process_message_queue():
                 await bot.send_message(
                     chat_id=tg_id,
                     text=msg["message"],
-                    reply_markup=calendly_keyboard  # <-- КНОПКА ПОД КАЖДЫМ СООБЩЕНИЕМ
+                    reply_markup=calendly_keyboard
                 )
 
                 supabase.table("admin_messages").update({
@@ -644,11 +644,36 @@ async def ask_city(message: types.Message, state: FSMContext):
     )
 
 
-# ========== ОБРАБОТЧИК БЕЗ ФИЛЬТРОВ (ДЛЯ СОХРАНЕНИЯ СООБЩЕНИЙ) ==========
+# ========== ОБРАБОТЧИК ДЛЯ ТЕХ, КТО УЖЕ ПРОШЁЛ ТЕСТ (ОТВЕЧАЕТ НА ЛЮБОЕ СООБЩЕНИЕ) ==========
+
+@dp.message()
+async def already_completed_test_handler(message: types.Message):
+    """Если пользователь уже проходил тест - показываем специальное сообщение"""
+    tg_id = message.from_user.id
+    
+    if has_user_completed_test(tg_id):
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🧠 Наш канал", url=CHANNEL_LINK)]]
+        )
+        await message.answer(
+            "😊 **Вы уже проходили этот опрос!**\n\n"
+            "Спасибо за доверие. Я помню ваши ответы.\n\n"
+            "Если хотите что-то уточнить или обсудить — напишите мне лично: @Andrey_trueself\n\n"
+            "А пока — подписывайтесь на мой канал, там я делюсь полезными мыслями о психологии.",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+        return  # Останавливаем дальнейшую обработку
+
+
+# ========== ОБРАБОТЧИК СОХРАНЕНИЯ СООБЩЕНИЙ (ТОЛЬКО ДЛЯ ТЕХ, КТО ПРОШЁЛ ТЕСТ) ==========
 
 @dp.message()
 async def save_user_message_handler(message: types.Message):
+    """Сохраняет сообщения от пользователей, которые прошли тест (не отправляя ответ)"""
     tg_id = message.from_user.id
+    
+    # Сохраняем сообщение в user_messages (ответ уже отправил предыдущий обработчик)
     if has_user_completed_test(tg_id):
         result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
         if result.data:
