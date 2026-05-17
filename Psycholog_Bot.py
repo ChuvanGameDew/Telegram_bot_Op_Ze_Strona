@@ -632,19 +632,18 @@ async def ask_city(message: types.Message, state: FSMContext):
     await state.update_data(user_city=city)
     await state.clear()
     await message.answer(
-        f"🙏 **Спасибо {user_name}. Твои ответы у меня.**\n\n"
+        f"🙏 Спасибо {user_name}. Твои ответы у меня.\n\n"
         "Я прочитаю их сам и напишу тебе лично в Telegram — с гипотезой и поддержкой. Без диагнозов.\n\n"
         "Обычно отвечаю через несколько часов, максимум — завтра утром.\n\n"
-        "**🧠 А ещё — если тебе интересна психология, саморазвитие и как работают наши механизмы психики...**\n\n"
-        f"👉 [Подпишись на мой Telegram-канал]({CHANNEL_LINK})\n\n"
+        "🧠 А ещё — если тебе интересна психология, саморазвитие и как работают наши механизмы психики...\n\n"
+        f"👉 Подпишись на мой Telegram-канал: {CHANNEL_LINK}\n\n"
         "Там я делюсь мыслями, которые не влезают в бота, и отвечаю на вопросы подписчиков.\n\n"
         "До скорого. 👋",
-        parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove()
     )
 
 
-# ========== ОБРАБОТЧИК ДЛЯ ТЕХ, КТО УЖЕ ПРОШЁЛ ТЕСТ (ОТВЕЧАЕТ НА ЛЮБОЕ СООБЩЕНИЕ) ==========
+# ========== ОБРАБОТЧИК ДЛЯ ТЕХ, КТО УЖЕ ПРОШЁЛ ТЕСТ ==========
 
 @dp.message()
 async def already_completed_test_handler(message: types.Message):
@@ -656,24 +655,22 @@ async def already_completed_test_handler(message: types.Message):
             inline_keyboard=[[InlineKeyboardButton(text="🧠 Наш канал", url=CHANNEL_LINK)]]
         )
         await message.answer(
-            "😊 **Вы уже проходили этот опрос!**\n\n"
+            "😊 Вы уже проходили этот опрос!\n\n"
             "Спасибо за доверие. Я помню ваши ответы.\n\n"
             "Если хотите что-то уточнить или обсудить — напишите мне лично: @Andrey_trueself\n\n"
             "А пока — подписывайтесь на мой канал, там я делюсь полезными мыслями о психологии.",
-            parse_mode="Markdown",
             reply_markup=keyboard
         )
-        return  # Останавливаем дальнейшую обработку
+        return
 
 
-# ========== ОБРАБОТЧИК СОХРАНЕНИЯ СООБЩЕНИЙ (ТОЛЬКО ДЛЯ ТЕХ, КТО ПРОШЁЛ ТЕСТ) ==========
+# ========== ОБРАБОТЧИК СОХРАНЕНИЯ СООБЩЕНИЙ ==========
 
 @dp.message()
 async def save_user_message_handler(message: types.Message):
-    """Сохраняет сообщения от пользователей, которые прошли тест (не отправляя ответ)"""
+    """Сохраняет сообщения от пользователей, которые прошли тест"""
     tg_id = message.from_user.id
     
-    # Сохраняем сообщение в user_messages (ответ уже отправил предыдущий обработчик)
     if has_user_completed_test(tg_id):
         result = supabase.table("bot_users").select("id").eq("tg_id", tg_id).execute()
         if result.data:
